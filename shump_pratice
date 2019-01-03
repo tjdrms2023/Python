@@ -2,8 +2,9 @@ import pygame
 import random
 from os import path
 
-WIDTH, HEIGHT = 360, 480 # Frame size
+WIDTH, HEIGHT = 900, 800 # Frame size
 FPS = 60 # Frame Per Second
+POWERUP_TIME = 5000
 
 # define colors
 WHITE = (255, 255, 255)
@@ -15,13 +16,14 @@ YELLOW = (255, 255, 0)
 
 img_dir = path.join(path.dirname(__file__), 'img')
 snd_dir = path.join(path.dirname(__file__), 'snd')
-
-
 pygame.init() # the command to start up pygame and 'initialize'
 pygame.mixer.init() # for sound
 screen = pygame.display.set_mode((WIDTH, HEIGHT)) # Create the frame
 pygame.display.set_caption("Game") # Name of the game
 clock = pygame.time.Clock() # make sure to run at the adequate FPS
+
+
+
 
 font_name = pygame.font.match_font('arial')
 def draw_text(surf, text, size, x, y):
@@ -32,11 +34,6 @@ def draw_text(surf, text, size, x, y):
 	text_rect.midtop = (x, y)
 	surf.blit(text_surface, text_rect)
 
-# collide하면 없어지므로 total number 유지하려면 newmob function 있어야.
-def newmob():
-	m = Mob()
-	all_sprites.add(m)
-	mobs.add(m)
 
 def draw_shield_bar(surf, x, y, pct):
 	if pct < 0:
@@ -48,6 +45,23 @@ def draw_shield_bar(surf, x, y, pct):
 	fill_rect = pygame.Rect(x, y, fill, BAR_HEIGHT)
 	pygame.draw.rect(surf, GREEN, fill_rect)
 	pygame.draw.rect(surf, WHITE, outline_rect, 2)
+
+
+def draw_lives(surf, x, y, lives, img):
+	for i in range(lives):
+		img_rect = img.get_rect()
+		img_rect.x = x + 30 * i
+		# object 사이에 30 pixel씩
+		img_rect.y = y
+		surf.blit(img, img_rect)
+
+
+	# collide하면 없어지므로 total number 유지하려면 newmob function 있어야.
+def newmob():
+	m = Mob()
+	all_sprites.add(m)
+	mobs.add(m)
+
 
 class Player(pygame.sprite.Sprite):
 	def __init__(self):
@@ -62,29 +76,107 @@ class Player(pygame.sprite.Sprite):
 		self.rect.centerx = WIDTH / 2
 		self.rect.bottom = HEIGHT - 10 # locating the rect at the bottom center of the screen.
 		self.speedx = 0 # keep tracking of how fast the rect is moving.
+		self.speedy = 0
 		self.shield = 100
+		self.shoot_delay = 150
+		# shoot_delay measures how long in milliseconds the ship should wait before
+		# launching another bullet.
+		self.last_shot = pygame.time.get_ticks()
+		# Lives counter, a flag (a variable that can be True or False) tp hide/show
+		# the player, and a timer to control how long we keep the player hidden.
+		self.lives = 3
+		self.hidden = False
+		self.hide_timer = pygame.time.get_ticks()
+		self.power = 1
+		# 'power' is to track what the 'power level' is.
+		self.power_time = pygame.time.get_ticks()
+		# Drop back down after a certain amount of time goes by.
+
 
 	# the code that will happen every frame of the game.
 	def update(self):
+		# timeout for powerups
+		if self.power >= 2 and pygame.time.get_ticks() - self.power_time > POWERUP_TIME:
+			self.power -= 1
+			self.power_time = pygame.time.get_ticks()
+
+		# unhide if hidden
+		if self.hidden and pygame.time.get_ticks() - self.hide_timer > 1000:
+		# 1초 지나면 unhide./
+			self.hidden = False
+			self.rect.centerx = WIDTH / 2
+			self.rect.bottom  = HEIGHT - 10
+
 		self.speedx = 0
+		self.speedy = 0
 		keystate = pygame.key.get_pressed()
 		if keystate[pygame.K_LEFT]:
 			self.speedx = -8
 		if keystate[pygame.K_RIGHT]:
 			self.speedx = 8
+		if keystate[pygame.K_UP]:
+			self.speedy = -8
+		if keystate[pygame.K_DOWN]:
+			self.speedy = 8
+		if keystate[pygame.K_SPACE]:
+			self.shoot()
 		self.rect.x += self.speedx
-
+		self.rect.y += self.speedy 
 		# make sure that the sprite doesn't go off the screen.
 		if self.rect.right > WIDTH:
 			self.rect.right = WIDTH
 		if self.rect.left < 0:
 			self.rect.left = 0
 
+	def powerup(self):
+		self.power += 1
+		# 한 발 더 나가게.
+		self.power_time = pygame.time.get_ticks()
+
 	def shoot(self):
-		bullet = Bullet(self.rect.centerx, self.rect.top)
-		all_sprites.add(bullet)
-		bullets.add(bullet)
-		# shoot_sound.play()
+		now = pygame.time.get_ticks()
+		if now - self.last_shot > self.shoot_delay:
+			self.last_shot = now
+			# Powerup 안 했을 때 (1개 나갈 때)
+			if self.power == 1:
+				bullet = Bullet(self.rect.centerx, self.rect.top)
+				all_sprites.add(bullet)
+				bullets.add(bullet)
+				# shoot_sound.play()
+			# Powerup 했을 때 (2개 나갈 때)
+			if self.power >= 2:
+				bullet1 = Bullet(self.rect.left, self.rect.centery)
+				bullet2 = Bullet(self.rect.right, self.rect.centery)
+				bullet3 = Bullet(self.rect.centerx, self.rect.centery)
+				all_sprites.add(bullet1)
+				all_sprites.add(bullet2)
+				all_sprites.add(bullet3)
+				bullets.add(bullet1)
+				bullets.add(bullet2)
+				bullets.add(bullet3)
+				# shoot_sound.play()
+
+		''' Old Ver.
+		now = pygame.time.get_ticks()
+		# time.get_ticks(): Return the number of milliseconds since pygame.init()
+		# was called. Before pygame is initialized will always be 0.
+		if now - self.last_shot > self.shoot_delay:
+        # When the space bar is held down, the game will check how much time has passed
+		# since the last bullet was created.
+			self.last_shot = now
+			# If it has been shoot_delay milliseconds, 
+			bullet = Bullet(self.rect.centerx, self.rect.top)
+			# then another bullet is fired, and 'last_shot' is updated.
+			all_sprites.add(bullet)
+			bullets.add(bullet)
+		'''
+
+	def hide(self):
+		# hide the player temporarily
+		self.hidden = True
+		self.hide_timer = pygame.time.get_ticks()
+		self.rect.center = (WIDTH / 2, HEIGHT + 200)
+
 
 class Mob(pygame.sprite.Sprite):
 	def __init__(self):
@@ -125,6 +217,7 @@ class Mob(pygame.sprite.Sprite):
 			self.rect.y = random.randrange(-100, -40)
 			self.speedy = random.randrange(1, 8)
 
+
 class Bullet(pygame.sprite.Sprite):
 	def __init__(self, x, y):
 		pygame.sprite.Sprite.__init__(self)
@@ -133,7 +226,7 @@ class Bullet(pygame.sprite.Sprite):
 		self.rect = self.image.get_rect()
 		self.rect.bottom = y
 		self.rect.centerx = x
-		self.speedy = -10 # negative value so that the bullet would go upward.
+		self.speedy = -24 # negative value so that the bullet would go upward.
 
 	def update(self):
 		self.rect.y += self.speedy
@@ -141,9 +234,84 @@ class Bullet(pygame.sprite.Sprite):
 		if self.rect.bottom < 0:
 			self.kill()
 
+
+class Explosion(pygame.sprite.Sprite):
+	def __init__(self, center, size):
+		pygame.sprite.Sprite.__init__(self)
+		self.size = size
+		self.image = explosion_anim[self.size][0]
+		self.rect = self.image.get_rect()
+		self.rect.center = center
+		self.frame = 0
+		self.last_update = pygame.time.get_ticks()
+		self.frame_rate = 50
+
+	def update(self):
+		now = pygame.time.get_ticks()
+		if now - self.last_update > self.frame_rate:
+			self.last_update = now
+			self.frame += 1
+			if self.frame == len(explosion_anim[self.size]):
+				self.kill()
+			else:
+				center = self.rect.center
+				self.image = explosion_anim[self.size][self.frame]
+				self.rect = self.image.get_rect()
+				self.rect.center = center
+
+
+class Pow(pygame.sprite.Sprite):
+	def __init__(self, center):
+		pygame.sprite.Sprite.__init__(self)
+		self.type = random.choice(['shield','gun'])
+		self.image = powerup_images[self.type]
+		self.image.set_colorkey(BLACK)
+		self.rect = self.image.get_rect()
+		self.rect.center = center
+		self.speedy = 2
+'''
+	def update(self):
+		self.rect.y += self.speedy
+		# kill if it moves off the top of the screen
+		if self.rect.top > HEIGHT:
+			self.kill()
+
+
+
+
+
+
+
+
+
+
+
+
+THIS NEEDS TO BE FILLED
+
+
+
+
+
+
+
+
+
+
+'''
+
+def show_go_screen():
+	screen.blit(background, background_rect)
+	draw_text(screen, "SHUMP!", 64, WIDTH / 2, HEIGHT / 4)
+	draw_text(screen, "Arrow keys move, Space to fire", 22, WIDTH / 2, HEIGHT / 2)
+	draw_text(screen, "Press a key to begin")
+
+
 background = pygame.image.load(path.join(img_dir, 'starfield.png')).convert()
 background_rect = background.get_rect()
 player_img = pygame.image.load(path.join(img_dir, 'playerShip1_orange.png')).convert()
+player_mini_img = pygame.transform.scale(player_img, (25,19))
+player_mini_img.set_colorkey(BLACK)
 bullet_img = pygame.image.load(path.join(img_dir, 'laserRed16.png')).convert()
 meteor_images = []
 meteor_list = ['meteorBrown_big1.png', 'meteorBrown_med1.png', 'meteorBrown_med1.png', 
@@ -151,6 +319,27 @@ meteor_list = ['meteorBrown_big1.png', 'meteorBrown_med1.png', 'meteorBrown_med1
                 'meteorBrown_tiny1.png']
 for img in meteor_list:
 	meteor_images.append(pygame.image.load(path.join(img_dir, img)).convert())
+explosion_anim ={}
+explosion_anim['lg'] = []
+explosion_anim['sm'] = []
+explosion_anim['player'] = []
+# Load graphics into the game and store them in a list.
+# lg for a meteor, sm for hitting shield.
+for i in range(9):
+	filename = 'regularExplosion0{}.png'.format(i)
+	img = pygame.image.load(path.join(img_dir, filename)).convert()
+	img.set_colorkey(BLACK)
+	img_lg = pygame.transform.scale(img, (75, 75))
+	explosion_anim['lg'].append(img_lg)
+	img_sm = pygame.transform.scale(img, (32, 32))
+	explosion_anim['sm'].append(img_sm)
+	img = pygame.image.load(path.join(img_dir, filename)).convert()
+	img.set_colorkey(BLACK)
+	explosion_anim['player'].append(img)
+powerup_images = {}
+powerup_images['shield'] = pygame.image.load(path.join(img_dir, 'shield_gold.png')).convert()
+powerup_images['gun'] = pygame.image.load(path.join(img_dir, 'bolt_gold.png')).convert()
+
 
 ''' Sound part
 
@@ -165,18 +354,32 @@ pygame.mixer.music.set_volume(0.4)
 all_sprites = pygame.sprite.Group() 
 mobs = pygame.sprite.Group()
 bullets = pygame.sprite.Group()
-
 player = Player()
 all_sprites.add(player) # every sprite created musted be added to all_sprites group
 						# so that it will be updated and drawn on the screen.
-for i in range(8):
+for i in range(80):
 	newmob()
 score = 0
 # pygame.mixer.music.play(loops =- 1)
+powerups = pygame.sprite.Group()
+
 
 #Game loop
+game_over = True
 running = True
 while running: 
+	if game_over:
+		show_go_screen()
+		game_over = False
+		all_sprites = pygame.sprite.Group()
+		mobs = pygame.sprite.Group()
+		bullets = pygame.sprite.Group()
+		powerups = pygame.sprite.Group()
+		player = Player()
+		all_sprites.add(player)
+		for i in range(8):
+			newmob()
+		score = 0
 	# Make running to end the loop
 	clock.tick(FPS) # Keep the loop running at the right speed. 
 	# Process input (events)
@@ -184,9 +387,6 @@ while running:
 		# check for closing window
 		if event.type == pygame.QUIT:
 			running = False
-		elif event.type == pygame.KEYDOWN:
-			if event.key == pygame.K_SPACE:
-				player.shoot()
 
 	# Update
 	all_sprites.update()
@@ -196,20 +396,48 @@ while running:
 	for hit in hits:
 		score += 50 - hit.radius
 		# random.choice(expl_sounds).play()
+		expl = Explosion(hit.rect.center, 'lg')
+		all_sprites.add(expl)
+		if random.random() > 0.95:
+		# 10%의 확률로 Powerup 생성
+			pow = Pow(hit.rect.center)
+			all_sprites.add(pow)
+			powerups.add(pow)
 		newmob()
 
 	# check to see if a mob hit the player
-	hits = pygame.sprite.spritecollide(player, mobs, True, pygame.sprite.collide_circle)
+	hits = pygame.sprite.spritecollide(player, mobs,True, pygame.sprite.collide_circle)
 	# third parameter is called 'dokill'. It sets whether the object 
 	# should be deleted when it gets hit.
 	# True로 바꿔야 부딫치면 없어짐. 
-
 	# 한번에 다수의 meteor 부딫힐 수 있으므로 for문 사용.
 	for hit in hits:
 		player.shield -= hit.radius * 2
+		expl = Explosion(hit.rect.center, 'sm')
+		all_sprites.add(expl)
 		newmob()
 		if player.shield <= 0:
-			running = False
+			death_explosion = Explosion(player.rect.center, 'player')
+			all_sprites.add(death_explosion)
+			player.hide()
+			player.lives -= 1
+			player.shield = 100
+ 
+
+	hits = pygame.sprite.spritecollide(player, powerups, True)
+	for hit in hits:
+		if hit.type == 'shield':
+			player.shield += random.randrange(10, 30)
+			if player.shield >= 100:
+				player.shield = 100
+		if hit.type == 'gun':
+			player.powerup()
+			#power_sound.play()
+
+	# if the player died and the explosion has finisehd playing
+	if player.lives == 0 and not death_explosion.alive(): 
+	# alive() function just returns whether a particular sprite is alive.
+		game_over = True
 	# Render / Draw
 	screen.fill(BLACK)
 	screen.blit(background, background_rect)
@@ -217,6 +445,7 @@ while running:
 	draw_text(screen, str(score), 18, WIDTH / 2, 10)
 	draw_shield_bar(screen, 5, 5, player.shield)
 	# Double Buffering
+	draw_lives(screen, WIDTH - 100, 5, player.lives, player_mini_img)
 	pygame.display.flip() # Print out and calculate the buffer simulataneously
-
+  
 pygame.quit()
